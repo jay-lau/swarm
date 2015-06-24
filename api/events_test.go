@@ -18,7 +18,7 @@ func (fw *FakeWriter) Write(p []byte) (n int, err error) {
 }
 
 func TestHandle(t *testing.T) {
-	eh := NewEventsHandler()
+	eh := newEventsHandler()
 	assert.Equal(t, eh.Size(), 0)
 
 	fw := &FakeWriter{Tmp: []byte{}}
@@ -27,11 +27,14 @@ func TestHandle(t *testing.T) {
 	assert.Equal(t, eh.Size(), 1)
 
 	event := &cluster.Event{
-		NodeName: "node_name",
-		NodeID:   "node_id",
-		NodeAddr: "node_addr",
-		NodeIP:   "node_ip",
+		Engine: &cluster.Engine{
+			ID:   "node_id",
+			Name: "node_name",
+			IP:   "node_ip",
+			Addr: "node_addr",
+		},
 	}
+
 	event.Event.Status = "status"
 	event.Event.Id = "id"
 	event.Event.From = "from"
@@ -39,15 +42,16 @@ func TestHandle(t *testing.T) {
 
 	assert.NoError(t, eh.Handle(event))
 
-	str := fmt.Sprintf("{%q:%q,%q:%q,%q:%q,%q:%d,%q:%q,%q:%q,%q:%q,%q:%q}",
+	str := fmt.Sprintf("{%q:%q,%q:%q,%q:%q,%q:%d,%q:{%q:%q,%q:%q,%q:%q,%q:%q}}",
 		"status", "status",
 		"id", "id",
 		"from", "from node:node_name",
 		"time", 0,
-		"node_name", "node_name",
-		"node_id", "node_id",
-		"node_addr", "node_addr",
-		"node_ip", "node_ip")
+		"node",
+		"Name", "node_name",
+		"Id", "node_id",
+		"Addr", "node_addr",
+		"Ip", "node_ip")
 
 	assert.Equal(t, str, string(fw.Tmp))
 }

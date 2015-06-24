@@ -1,113 +1,71 @@
 package cluster
 
 import (
-	"errors"
-	"strings"
-	"sync"
+	"io"
 
-	log "github.com/Sirupsen/logrus"
+	"github.com/samalba/dockerclient"
 )
 
-var (
-	ErrNodeNotConnected      = errors.New("node is not connected to docker's REST API")
-	ErrNodeAlreadyRegistered = errors.New("node was already added to the cluster")
-)
+// Cluster is exported
+type Cluster interface {
+	// Create a container
+	CreateContainer(config *ContainerConfig, name string) (*Container, error)
 
-type Cluster struct {
-	sync.RWMutex
-	eventHandlers []EventHandler
-	nodes         map[string]*Node
-}
+	// Remove a container
+	RemoveContainer(container *Container, force bool) error
 
-func NewCluster() *Cluster {
-	return &Cluster{
-		nodes: make(map[string]*Node),
-	}
-}
+	// Return all images
+	Images() []*Image
 
-func (c *Cluster) Handle(e *Event) error {
-	for _, eventHandler := range c.eventHandlers {
-		if err := eventHandler.Handle(e); err != nil {
-			log.Error(err)
-		}
-	}
-	return nil
-}
+	// Return one image matching `IDOrName`
+	Image(IDOrName string) *Image
 
-// Register a node within the cluster. The node must have been already
-// initialized.
-func (c *Cluster) AddNode(n *Node) error {
-	if !n.IsConnected() {
-		return ErrNodeNotConnected
-	}
+	// Remove images from the cluster
+	RemoveImages(name string) ([]*dockerclient.ImageDelete, error)
 
-	c.Lock()
-	defer c.Unlock()
+	// Return all containers
+	Containers() Containers
 
-	if _, exists := c.nodes[n.ID]; exists {
-		return ErrNodeAlreadyRegistered
-	}
+	// Return container the matching `IDOrName`
+	// TODO: remove this method from the interface as we can use
+	// cluster.Containers().Get(IDOrName)
+	Container(IDOrName string) *Container
 
-	c.nodes[n.ID] = n
-	return n.Events(c)
-}
+	// Pull images
+	// `callback` can be called multiple time
+	//  `what` is what is being pulled
+	//  `status` is the current status, like "", "in progress" or "downloaded
+	Pull(name string, authConfig *dockerclient.AuthConfig, callback func(what, status string))
 
-// Containers returns all the containers in the cluster.
-func (c *Cluster) Containers() []*Container {
-	c.Lock()
-	defer c.Unlock()
+	// Import image
+	// `callback` can be called multiple time
+	// `what` is what is being imported
+	// `status` is the current status, like "", "in progress" or "imported"
+	Import(source string, repository string, tag string, imageReader io.Reader, callback func(what, status string))
 
-	out := []*Container{}
-	for _, n := range c.nodes {
-		containers := n.Containers()
-		for _, container := range containers {
-			out = append(out, container)
-		}
-	}
+	// Load images
+	// `callback` can be called multiple time
+	// `what` is what is being loaded
+	// `status` is the current status, like "", "in progress" or "loaded"
+	Load(imageReader io.Reader, callback func(what, status string))
 
-	return out
-}
+	// Return some info about the cluster, like nb or containers / images
+	// It is pretty open, so the implementation decides what to return.
+	Info() [][]string
 
-// Container returns the container with ID in the cluster
-func (c *Cluster) Container(IdOrName string) *Container {
-	for _, container := range c.Containers() {
-		// Match ID prefix.
-		if strings.HasPrefix(container.Id, IdOrName) {
-			return container
-		}
+	// Return the total memory of the cluster
+	TotalMemory() int64
 
-		// Match name, /name or engine/name.
-		for _, name := range container.Names {
-			if name == IdOrName || name == "/"+IdOrName || container.node.ID+name == IdOrName || container.node.Name+name == IdOrName {
-				return container
-			}
-		}
-	}
+	// Return the number of CPUs in the cluster
+	TotalCpus() int64
 
-	return nil
-}
+	// Register an event handler for cluster-wide events.
+	RegisterEventHandler(h EventHandler) error
 
-// Nodes returns the list of nodes in the cluster
-func (c *Cluster) Nodes() []*Node {
-	nodes := []*Node{}
-	c.RLock()
-	for _, node := range c.nodes {
-		nodes = append(nodes, node)
-	}
-	c.RUnlock()
-	return nodes
-}
+	// FIXME: remove this method
+	// Return a random engine
+	RANDOMENGINE() (*Engine, error)
 
-func (c *Cluster) Node(addr string) *Node {
-	for _, node := range c.nodes {
-		if node.Addr == addr {
-			return node
-		}
-	}
-	return nil
-}
-
-func (c *Cluster) Events(h EventHandler) error {
-	c.eventHandlers = append(c.eventHandlers, h)
-	return nil
+	// RenameContainer rename a container
+	RenameContainer(container *Container, newName string) error
 }

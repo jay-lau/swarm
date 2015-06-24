@@ -4,10 +4,11 @@ import (
 	"errors"
 
 	"github.com/docker/swarm/cluster"
-	"github.com/samalba/dockerclient"
+	"github.com/docker/swarm/scheduler/node"
 )
 
 var (
+	// ErrNoHealthyNodeAvailable is exported
 	ErrNoHealthyNodeAvailable = errors.New("No healthy node available in the cluster")
 )
 
@@ -15,10 +16,16 @@ var (
 type HealthFilter struct {
 }
 
-func (f *HealthFilter) Filter(config *dockerclient.ContainerConfig, nodes []*cluster.Node) ([]*cluster.Node, error) {
-	result := []*cluster.Node{}
+// Name returns the name of the filter
+func (f *HealthFilter) Name() string {
+	return "health"
+}
+
+// Filter is exported
+func (f *HealthFilter) Filter(_ *cluster.ContainerConfig, nodes []*node.Node) ([]*node.Node, error) {
+	result := []*node.Node{}
 	for _, node := range nodes {
-		if node.IsHealthy() {
+		if node.IsHealthy {
 			result = append(result, node)
 		}
 	}

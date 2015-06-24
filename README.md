@@ -1,67 +1,78 @@
-## Swarm: a Docker-native clustering system [![Build Status](https://travis-ci.org/docker/swarm.svg?branch=master)](https://travis-ci.org/docker/swarm)
+# Swarm: a Docker-native clustering system
+
+[![GoDoc](https://godoc.org/github.com/docker/swarm?status.png)](https://godoc.org/github.com/docker/swarm)
+[![Build Status](https://travis-ci.org/docker/swarm.svg?branch=master)](https://travis-ci.org/docker/swarm)
+[![Coverage Status](https://coveralls.io/repos/docker/swarm/badge.svg)](https://coveralls.io/r/docker/swarm)
 
 ![Docker Swarm Logo](logo.png?raw=true "Docker Swarm Logo")
 
-`swarm` is a simple tool which controls a cluster of Docker hosts and exposes it as a single "virtual" host.
+Docker Swarm is native clustering for Docker. It turns a pool of Docker hosts
+into a single, virtual host.
 
-`swarm` uses the standard Docker API as its frontend, which means any tool which speaks Docker can control swarm transparently: dokku, fig, krane, flynn, deis, docker-ui, shipyard, drone.io, Jenkins... and of course the Docker client itself.
+Swarm serves the standard Docker API, so any tool which already communicates
+with a Docker daemon can use Swarm to transparently scale to multiple hosts:
+Dokku, Compose, Krane, Flynn, Deis, DockerUI, Shipyard, Drone, Jenkins... and,
+of course, the Docker client itself.
 
-Like the other Docker projects, `swarm` follows the "batteries included but removable" principle. It ships with a simple scheduling backend out of the box. The goal is to provide a smooth out-of-box experience for simple use cases, and allow swapping in more powerful backends, like `Mesos`, for large scale production deployments.
+Like other Docker projects, Swarm follows the "batteries included but removable"
+principle. It ships with a set of simple scheduling backends out of the box, and as
+initial development settles, an API will be developed to enable pluggable backends.
+The goal is to provide a smooth out-of-the-box experience for simple use cases, and
+allow swapping in more powerful backends, like Mesos, for large scale production
+deployments.
 
-### Installation
+## Installation and documentation
 
-######1 - Download the current source code.
-```sh
-go get github.com/docker/swarm
-```
+Full documentation [is available here](http://docs.docker.com/swarm/).
 
-######2 - Compile and install `swarm`
-```sh
-go install github.com/docker/swarm
-```
+## Development installation
 
-######3 - Nodes setup
-The only requirement for Swarm nodes is to run a regular Docker daemon.
+You can download and install from source instead of using the Docker
+image. Ensure you have golang, godep and the git client installed.
 
-In order for Swarm to be able to communicate with its nodes, they must bind on a network interface.
-This can be achieved by starting Docker with the `-H` flag (e.g. `-H 0.0.0.0:2375`).
-
-Currently, nodes must be running the Docker **master** version.
-Master binaries are available here: https://master.dockerproject.com/
-
-### Example usage
+**For example, on Ubuntu you'd run:**
 
 ```bash
-# create a cluster
-$ swarm create
-6856663cdefdec325839a4b7e1de38e8
-
-# on each of your nodes, start the swarm agent
-$ swarm join --token=6856663cdefdec325839a4b7e1de38e8 --addr=<docker_daemon_ip1:4243>
-$ swarm join --token=6856663cdefdec325839a4b7e1de38e8 --addr=<docker_daemon_ip2:4243>
-$ swarm join --token=6856663cdefdec325839a4b7e1de38e8 --addr=<docker_daemon_ip3:4243>
-...
-
-# start the manager on any machine or your laptop
-$ swarm manage --token=6856663cdefdec325839a4b7e1de38e8 --addr=<swarm_ip:4243>
-
-# use the regular docker cli
-$ docker -H <swarm_ip:4243> info
-$ docker -H <swarm_ip:4243> run ... 
-$ docker -H <swarm_ip:4243> ps 
-$ docker -H <swarm_ip:4243> logs ...
-...
-
-# list nodes in your cluster
-$ swarm list --token=6856663cdefdec325839a4b7e1de38e8
-http://<docker_daemon_ip1:4243>
-http://<docker_daemon_ip2:4243>
-http://<docker_daemon_ip3:4243>
+$ apt-get install golang git
+$ go get github.com/tools/godep
 ```
+
+You may need to set `$GOPATH`, e.g `mkdir ~/gocode; export GOPATH=~/gocode`.
+
+**For example, on Mac OS X you'd run:**
+
+```bash
+$ brew install go
+$ export GOPATH=~/go
+$ export PATH=$PATH:~/go/bin
+$ go get github.com/tools/godep
+```
+
+Then install the `swarm` binary:
+
+```bash
+$ mkdir -p $GOPATH/src/github.com/docker/
+$ cd $GOPATH/src/github.com/docker/
+$ git clone https://github.com/docker/swarm
+$ cd swarm
+$ godep go install .
+```
+
+From here, you can follow the instructions [in the main documentation](http://docs.docker.com/swarm/),
+replacing `docker run swarm` with just `swarm`.
 
 ## Participating
 
-We welcome pull requests and patches; come say hi on IRC, #docker-swarm on freenode.
+You can contribute to Docker Swarm in several different ways:
+
+  - If you have comments, questions, or want to use your knowledge to help others, come join the conversation on IRC. You can reach us at #docker-swarm on Freenode.
+
+  - To report a problem or request a feature, please [file an issue](ISSUE-TRIAGE.md)
+
+  - Of course, we welcome pull requests and patches. For information on making feature requests, follow the process suggested here.
+
+Finally, if you want to see what we have for the future and learn more about our release cycles, all this information is detailed on the [wiki](https://github.com/docker/swarm/wiki)
+
 
 ## Creators
 
@@ -77,6 +88,7 @@ We welcome pull requests and patches; come say hi on IRC, #docker-swarm on freen
 
 ## Copyright and license
 
-Code and documentation copyright 2014 Docker, inc. Code released under the Apache 2.0 license.
-Docs released under Creative commons.
+Code and documentation copyright 2014-2015 Docker, inc. Code released under the
+Apache 2.0 license.
 
+Docs released under Creative commons.

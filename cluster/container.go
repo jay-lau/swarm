@@ -1,38 +1,84 @@
 package cluster
 
-import "github.com/samalba/dockerclient"
+import (
+	"strings"
 
+	"github.com/docker/docker/pkg/stringid"
+	"github.com/samalba/dockerclient"
+)
+
+// Container is exported
 type Container struct {
 	dockerclient.Container
 
-	Info dockerclient.ContainerInfo
-	node *Node
+	Config *ContainerConfig
+	Info   dockerclient.ContainerInfo
+	Engine *Engine
 }
 
-func (c *Container) Node() *Node {
-	return c.node
+// Refresh container
+func (c *Container) Refresh() error {
+	return c.Engine.refreshContainer(c.Id, true)
 }
 
-func (c *Container) Start() error {
-	return c.node.client.StartContainer(c.Id, nil)
-}
+// Containers represents a list a containers
+type Containers []*Container
 
-func (c *Container) Kill(signal string) error {
-	return c.node.client.KillContainer(c.Id, signal)
-}
+// Get returns a container using it's ID or Name
+func (containers Containers) Get(IDOrName string) *Container {
+	// Abort immediately if the name is empty.
+	if len(IDOrName) == 0 {
+		return nil
+	}
 
-func (c *Container) Stop() error {
-	return c.node.client.StopContainer(c.Id, 8)
-}
+	// Match exact or short Container ID.
+	for _, container := range containers {
+		if container.Id == IDOrName || stringid.TruncateID(container.Id) == IDOrName {
+			return container
+		}
+	}
 
-func (c *Container) Restart(timeout int) error {
-	return c.node.client.RestartContainer(c.Id, timeout)
-}
+	// Match exact Swarm ID.
+	for _, container := range containers {
+		if swarmID := container.Config.SwarmID(); swarmID == IDOrName || stringid.TruncateID(swarmID) == IDOrName {
+			return container
+		}
+	}
 
-func (c *Container) Pause() error {
-	return c.node.client.PauseContainer(c.Id)
-}
+	candidates := []*Container{}
 
-func (c *Container) Unpause() error {
-	return c.node.client.UnpauseContainer(c.Id)
+	// Match name, /name or engine/name.
+	for _, container := range containers {
+		for _, name := range container.Names {
+			if name == IDOrName || name == "/"+IDOrName || container.Engine.ID+name == IDOrName || container.Engine.Name+name == IDOrName {
+				return container
+			}
+		}
+	}
+
+	if size := len(candidates); size == 1 {
+		return candidates[0]
+	} else if size > 1 {
+		return nil
+	}
+
+	// Match Container ID prefix.
+	for _, container := range containers {
+		if strings.HasPrefix(container.Id, IDOrName) {
+			candidates = append(candidates, container)
+		}
+	}
+
+	// Match Swarm ID prefix.
+	for _, container := range containers {
+		if strings.HasPrefix(container.Config.SwarmID(), IDOrName) {
+			candidates = append(candidates, container)
+		}
+	}
+
+	if len(candidates) == 1 {
+		return candidates[0]
+	}
+
+	return nil
 }

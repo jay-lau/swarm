@@ -2,15 +2,13 @@ package cluster
 
 import "github.com/samalba/dockerclient"
 
+// Event is exported
 type Event struct {
 	dockerclient.Event
-
-	NodeName string
-	NodeID   string
-	NodeAddr string
-	NodeIP   string
+	Engine *Engine
 }
 
+// EventHandler is exported
 type EventHandler interface {
 	Handle(*Event) error
 }
