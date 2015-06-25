@@ -30,7 +30,6 @@ func init() {
 	strategies = []PlacementStrategy{
 		&SpreadPlacementStrategy{},
 		&BinpackPlacementStrategy{},
-                &EGOPlacementStrategy{},
 		&RandomPlacementStrategy{},
 	}
 }

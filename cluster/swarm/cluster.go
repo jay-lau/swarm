@@ -20,6 +20,9 @@ import (
 	"github.com/samalba/dockerclient"
 )
 
+// SwarmLabelNamespace defines the key prefix in all custom labels
+const SwarmLabelNamespace = "com.docker.swarm"
+
 // Cluster is exported
 type Cluster struct {
 	sync.RWMutex
@@ -122,6 +125,82 @@ func (c *Cluster) CreateContainer(config *cluster.ContainerConfig, name string) 
 	return nil, nil
 }
 
+func getEGOAllocId(container *cluster.Container) string {
+        var (
+                pkg   = "swarm"
+                class = "Cluster"
+                fn    = "getEGOAllocId"
+        )
+	log.Debugf("[%s/%s/%s] Entering...", pkg, class, fn)
+        var allocid = ""
+
+        var key string = SwarmLabelNamespace+"ego.allocid"
+        allocid = container.Labels[key]
+
+	if allocid == "" {
+		log.Debugf("[%s/%s/%s] Container label %s not found.", pkg, class, fn, key)
+	} else {
+		log.Debugf("[%s/%s/%s] Container label %s=%s found.", pkg, class, fn, key, allocid)
+	}
+
+        return allocid
+}
+
+func (c *Cluster) schedulerRemoveAllocation(container *cluster.Container) error {
+        var (
+                pkg   = "swarm"
+                class = "Cluster"
+                fn    = "schedulerRemoveAllocation"
+        )
+
+	log.Debugf("[%s/%s/%s] Entering...", pkg, class, fn)
+        allocid := getEGOAllocId(container)
+        if allocid == "" {
+                return nil
+        }
+
+	c.scheduler.RemoveAllocation(allocid)
+        //egoModuleClient := egomodule.NewEGOModule()
+
+        //var handle *egomodule.GoEGOHandle
+        //handle, error := egoModuleClient.GoEGOOpen()
+        //if handle != nil {
+        //        if error != nil {
+        //          log.Debugf("[%s/%s/%s] Opened ego handle created with code: %v", pkg, class, fn, error)
+        //        } else {
+        //          log.Debugf("[%s/%s/%s] Opened ego handle created with no error code.", pkg, class, fn)
+        //        }
+
+        //       egoModuleClient.GoEGOLogon(handle)
+
+        //      /* EGO Client registration request object. */
+        //        rc, error := egoModuleClient.GoEGORegisterMD(handle)
+        //        if rc < 0 {
+        //                log.Debugf("[%s/%s/%s] Client registration request allocation failed.", pkg, class, fn)
+        //                if error != nil {
+        //                        log.Debugf("[%s/%s/%s] Error code: %v", pkg, class, fn, error)
+        //                }
+        //        } else {
+        //                log.Debugf("[%s/%s/%s] EGO client name registration complete.  Return code: %v", pkg, class, fn, rc)
+
+        //                /* Allocation release. */
+        //                rc1, error1 := egoModuleClient.GoEgoReleaseMD(handle, allocid)
+        //                log.Debugf("[%s/%s/%s] EGO release allocation id: %s return code: %d", pkg, class, fn, allocid,  rc1)
+//			if rc1 < 0 {
+//			    if error1 != nil {
+//                                log.Debugf("[%s/%s/%s] EGO release allocation id: %s error: %v", pkg, class, fn, allocid,  error1)
+//			    }
+//			}
+//                        //egoModuleClient.GoEGOUnregister(handle)
+//                }
+//                //error = egoModuleClient.GoEGOClose(handle)
+//        } else {
+//                log.Debugf("[%s/%s/%s] Open ego failed, error code: %v", pkg, class, fn, error)
+//        }
+
+        return nil
+}
+
 // RemoveContainer aka Remove a container from the cluster. Containers should
 // always be destroyed through the scheduler to guarantee atomicity.
 func (c *Cluster) RemoveContainer(container *cluster.Container, force bool) error {
@@ -137,8 +216,11 @@ func (c *Cluster) RemoveContainer(container *cluster.Container, force bool) erro
 			log.Debugf("Container %s not found in the store", container.Id)
 			return nil
 		}
+                c.schedulerRemoveAllocation(container)
 		return err
 	}
+
+        c.schedulerRemoveAllocation(container)
 	return nil
 }
 

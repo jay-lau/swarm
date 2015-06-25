@@ -1,0 +1,167 @@
+diff --git a/cluster/swarm/cluster.go b/cluster/swarm/cluster.go
+index 8f2c7d1..78a5076 100644
+--- a/cluster/swarm/cluster.go
++++ b/cluster/swarm/cluster.go
+@@ -20,6 +20,9 @@ import (
+ 	"github.com/samalba/dockerclient"
+ )
+ 
++// SwarmLabelNamespace defines the key prefix in all custom labels
++const SwarmLabelNamespace = "com.docker.swarm"
++
+ // Cluster is exported
+ type Cluster struct {
+ 	sync.RWMutex
+@@ -122,6 +125,82 @@ func (c *Cluster) CreateContainer(config *cluster.ContainerConfig, name string)
+ 	return nil, nil
+ }
+ 
++func getEGOAllocId(container *cluster.Container) string {
++        var (
++                pkg   = "swarm"
++                class = "Cluster"
++                fn    = "getEGOAllocId"
++        )
++	log.Debugf("[%s/%s/%s] Entering...", pkg, class, fn)
++        var allocid = ""
++
++        var key string = SwarmLabelNamespace+"ego.allocid"
++        allocid = container.Labels[key]
++
++	if allocid == "" {
++		log.Debugf("[%s/%s/%s] Container label %s not found.", pkg, class, fn, key)
++	} else {
++		log.Debugf("[%s/%s/%s] Container label %s=%s found.", pkg, class, fn, key, allocid)
++	}
++
++        return allocid
++}
++
++func (c *Cluster) schedulerRemoveAllocation(container *cluster.Container) error {
++        var (
++                pkg   = "swarm"
++                class = "Cluster"
++                fn    = "schedulerRemoveAllocation"
++        )
++
++	log.Debugf("[%s/%s/%s] Entering...", pkg, class, fn)
++        allocid := getEGOAllocId(container)
++        if allocid == "" {
++                return nil
++        }
++
++	c.scheduler.RemoveAllocation(allocid)
++        //egoModuleClient := egomodule.NewEGOModule()
++
++        //var handle *egomodule.GoEGOHandle
++        //handle, error := egoModuleClient.GoEGOOpen()
++        //if handle != nil {
++        //        if error != nil {
++        //          log.Debugf("[%s/%s/%s] Opened ego handle created with code: %v", pkg, class, fn, error)
++        //        } else {
++        //          log.Debugf("[%s/%s/%s] Opened ego handle created with no error code.", pkg, class, fn)
++        //        }
++
++        //       egoModuleClient.GoEGOLogon(handle)
++
++        //      /* EGO Client registration request object. */
++        //        rc, error := egoModuleClient.GoEGORegisterMD(handle)
++        //        if rc < 0 {
++        //                log.Debugf("[%s/%s/%s] Client registration request allocation failed.", pkg, class, fn)
++        //                if error != nil {
++        //                        log.Debugf("[%s/%s/%s] Error code: %v", pkg, class, fn, error)
++        //                }
++        //        } else {
++        //                log.Debugf("[%s/%s/%s] EGO client name registration complete.  Return code: %v", pkg, class, fn, rc)
++
++        //                /* Allocation release. */
++        //                rc1, error1 := egoModuleClient.GoEgoReleaseMD(handle, allocid)
++        //                log.Debugf("[%s/%s/%s] EGO release allocation id: %s return code: %d", pkg, class, fn, allocid,  rc1)
++//			if rc1 < 0 {
++//			    if error1 != nil {
++//                                log.Debugf("[%s/%s/%s] EGO release allocation id: %s error: %v", pkg, class, fn, allocid,  error1)
++//			    }
++//			}
++//                        //egoModuleClient.GoEGOUnregister(handle)
++//                }
++//                //error = egoModuleClient.GoEGOClose(handle)
++//        } else {
++//                log.Debugf("[%s/%s/%s] Open ego failed, error code: %v", pkg, class, fn, error)
++//        }
++
++        return nil
++}
++
+ // RemoveContainer aka Remove a container from the cluster. Containers should
+ // always be destroyed through the scheduler to guarantee atomicity.
+ func (c *Cluster) RemoveContainer(container *cluster.Container, force bool) error {
+@@ -137,8 +216,11 @@ func (c *Cluster) RemoveContainer(container *cluster.Container, force bool) erro
+ 			log.Debugf("Container %s not found in the store", container.Id)
+ 			return nil
+ 		}
++                c.schedulerRemoveAllocation(container)
+ 		return err
+ 	}
++
++        c.schedulerRemoveAllocation(container)
+ 	return nil
+ }
+ 
+diff --git a/scheduler/scheduler.go b/scheduler/scheduler.go
+index c103f1a..ccec523 100644
+--- a/scheduler/scheduler.go
++++ b/scheduler/scheduler.go
+@@ -3,11 +3,18 @@ package scheduler
+ import (
+ 	"strings"
+ 	"sync"
++        "unsafe"
+ 
+ 	"github.com/docker/swarm/cluster"
+ 	"github.com/docker/swarm/scheduler/filter"
+ 	"github.com/docker/swarm/scheduler/node"
+ 	"github.com/docker/swarm/scheduler/strategy"
++        log "github.com/Sirupsen/logrus"
++)
++
++const (
++        pkg   = "scheduler"
++        class = "Scheduler"
+ )
+ 
+ // Scheduler is exported
+@@ -36,6 +43,22 @@ func (s *Scheduler) SelectNodeForContainer(nodes []*node.Node, config *cluster.C
+ 	return s.strategy.PlaceContainer(config, accepted)
+ }
+ 
++// RemoveAllocation will removed allocation from the scheduler
++func (s *Scheduler) RemoveAllocation(id string) error {
++	var fn = "RemoveAllocation"
++        log.Debugf("[%s/%s/%s] Entering...",  pkg, class, fn)
++	var name = s.strategy.Name()
++	if name == "ego" {
++                var strat strategy.PlacementStrategy = s.strategy
++                pstrat := (*strategy.EGOPlacementStrategy) (unsafe.Pointer(&strat))
++                err := pstrat.ReleaseAllocation(id)
++                if err == nil {
++			log.Debugf("[%s/%s/%s] Removed allocation id %s from scheduler.",  pkg, class, fn, id)
++		}
++	} 
++	return nil
++}
++
+ // Strategy returns the strategy name
+ func (s *Scheduler) Strategy() string {
+ 	return s.strategy.Name()
+diff --git a/scheduler/strategy/strategy.go b/scheduler/strategy/strategy.go
+index d5caf67..64676ff 100644
+--- a/scheduler/strategy/strategy.go
++++ b/scheduler/strategy/strategy.go
+@@ -30,6 +30,7 @@ func init() {
+ 	strategies = []PlacementStrategy{
+ 		&SpreadPlacementStrategy{},
+ 		&BinpackPlacementStrategy{},
++                &EGOPlacementStrategy{},
+ 		&RandomPlacementStrategy{},
+ 	}
+ }
